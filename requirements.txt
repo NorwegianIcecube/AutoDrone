@@ -1,0 +1,7 @@
+numpy
+gymnasium
+stable-baselines3
+torch
+opencv-python
+mujoco
+matplotlib
