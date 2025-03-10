@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.env
+.venv
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+.installed.cfg
+MANIFEST
+
+# ROS2
+install/
+log/
+build/
+ws_drone_comms/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Simulation and temp files
+*.pcd
+*.pyc
+*.bag
