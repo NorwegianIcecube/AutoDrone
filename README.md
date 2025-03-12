@@ -40,7 +40,16 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Build the ROS2 workspace:
+4. Install ROS dependencies using rosdep:
+```bash
+sudo apt update
+sudo apt install -y python3-rosdep
+sudo rosdep init # Skip if already initialized
+rosdep update
+rosdep install --from-paths . --ignore-src -y
+```
+
+5. Build the ROS2 workspace:
 ```bash
 colcon build
 source install/setup.bash
