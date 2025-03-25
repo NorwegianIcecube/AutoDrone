@@ -13,10 +13,6 @@ import logging
 
 # Import PX4 messages
 try:
-    # Try with local build directory first
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    sys.path.append(os.path.join(current_path, "build/px4_msgs"))
-    
     from px4_msgs.msg import (
         VehicleOdometry, 
         VehicleCommand, 
@@ -25,18 +21,8 @@ try:
         VehicleStatus
     )
 except ImportError:
-    # Fallback to direct import
-    try:
-        from px4_msgs.msg import (
-            VehicleOdometry, 
-            VehicleCommand, 
-            OffboardControlMode, 
-            TrajectorySetpoint, 
-            VehicleStatus
-        )
-    except ImportError:
-        print("ERROR: Could not import px4_msgs. Make sure you've sourced ROS2 environment.")
-        sys.exit(1)
+    print("ERROR: Could not import px4_msgs. Make sure you've sourced ROS2 environment.")
+    sys.exit(1)
 
 
 class PX4DroneEnv(gym.Env):
@@ -138,7 +124,7 @@ class PX4DroneEnv(gym.Env):
         # Vehicle status subscriber
         self.vehicle_status_sub = self.node.create_subscription(
             VehicleStatus,
-            '/fmu/out/vehicle_status',
+            '/fmu/out/vehicle_status_v1',
             self._vehicle_status_callback,
             qos_profile
         )
@@ -147,7 +133,7 @@ class PX4DroneEnv(gym.Env):
         """Thread function to spin the ROS2 node"""
         self.executor.spin()
         
-    def _wait_for_odometry(self, timeout=15):
+    def _wait_for_odometry(self, timeout=10):
         """Wait for initial odometry data"""
         print(f"Waiting for odometry data (timeout: {timeout} seconds)...")
         start_time = time.time()
@@ -208,14 +194,14 @@ class PX4DroneEnv(gym.Env):
     def _vehicle_status_callback(self, msg):
         """Monitor vehicle status changes"""
         # Track arming state changes
-        self.armed = (msg.arming_state == 1)  # 1 = ARMED
+        self.armed = (msg.arming_state == 2)  # 2 = ARMED
         
         # Track nav state for offboard mode
         self.offboard_mode = (msg.nav_state == 14)  # 14 = OFFBOARD mode
         
         # Log state changes for debugging
         if hasattr(self, '_prev_arming_state') and msg.arming_state != self._prev_arming_state:
-            arm_state_names = {0: "DISARMED", 1: "ARMED"}
+            arm_state_names = {1: "DISARMED", 2: "ARMED"}
             state_name = arm_state_names.get(msg.arming_state, f"UNKNOWN({msg.arming_state})")
             self.logger.info(f"Arming state changed: {state_name}")
         self._prev_arming_state = msg.arming_state
@@ -371,7 +357,7 @@ class PX4DroneEnv(gym.Env):
             self.logger.info("Offboard mode enabled successfully")
         else:
             self.logger.warning("Failed to enable offboard mode")
-            
+
         return self.offboard_mode
     
     def reset(self, seed=None, options=None):
@@ -400,7 +386,7 @@ class PX4DroneEnv(gym.Env):
         """
         # Make sure we're still sending offboard control heartbeat at >2Hz
         current_time = time.time()
-        if current_time - self.last_offboard_timestamp > 0.3:  # Send at least 3Hz
+        if current_time - self.last_offboard_timestamp > 0.2:  # Send at least at 5Hz
             self._publish_offboard_control_mode()
         
         # Publish attitude setpoint
@@ -429,7 +415,7 @@ class PX4DroneEnv(gym.Env):
             "armed": self.armed,
             "offboard_mode": self.offboard_mode
         }
-        
+
         return observation, reward, terminated, truncated, info
     
     def _get_obs(self):

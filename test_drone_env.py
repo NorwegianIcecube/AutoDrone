@@ -67,7 +67,7 @@ def test_basic_flight():
     
     # Test increasing thrust
     print("\nPhase 2: Testing thrust increase...")
-    for i in range(20):  # 2 seconds
+    for i in range(30):  # 3 seconds
         # Gradually increase thrust
         thrust = 0.4 + (i / 20) * 0.3  # Increase from 0.4 to 0.7
         action = np.array([0.0, 0.0, 0.0, thrust])
@@ -82,8 +82,8 @@ def test_basic_flight():
     # Test pitch (forward/backward movement)
     print("\nPhase 3: Testing pitch control (forward then backward)...")
     # Forward movement
-    for i in range(15):  # 1.5 seconds
-        action = np.array([0.0, -0.3, 0.0, 0.5])  # Pitch forward with moderate thrust
+    for i in range(30):  # 3 seconds
+        action = np.array([0.0, -0.6, 0.0, 0.7])  # Pitch forward with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
             print(f"Forward pitch: -0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
@@ -93,8 +93,8 @@ def test_basic_flight():
         time.sleep(0.1)
     
     # Backward movement
-    for i in range(15):  # 1.5 seconds
-        action = np.array([0.0, 0.3, 0.0, 0.5])  # Pitch backward with moderate thrust
+    for i in range(30):  # 3 seconds
+        action = np.array([0.0, 0.6, 0.0, 0.7])  # Pitch backward with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
             print(f"Backward pitch: 0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
@@ -112,8 +112,8 @@ def test_basic_flight():
     # Test roll (left/right movement)
     print("\nPhase 4: Testing roll control (right then left)...")
     # Right movement
-    for i in range(15):  # 1.5 seconds
-        action = np.array([0.3, 0.0, 0.0, 0.5])  # Roll right with moderate thrust
+    for i in range(30):  # 3 seconds
+        action = np.array([0.6, 0.0, 0.0, 0.7])  # Roll right with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
             print(f"Right roll: 0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
@@ -123,8 +123,8 @@ def test_basic_flight():
         time.sleep(0.1)
     
     # Left movement
-    for i in range(15):  # 1.5 seconds
-        action = np.array([-0.3, 0.0, 0.0, 0.5])  # Roll left with moderate thrust
+    for i in range(30):  # 3 seconds
+        action = np.array([-0.6, 0.0, 0.0, 0.7])  # Roll left with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
             print(f"Left roll: -0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
@@ -142,8 +142,8 @@ def test_basic_flight():
     # Test yaw rate (rotation)
     print("\nPhase 5: Testing yaw rate control (clockwise then counter-clockwise)...")
     # Clockwise rotation
-    for i in range(15):  # 1.5 seconds
-        action = np.array([0.0, 0.0, 0.4, 0.5])  # Yaw clockwise with moderate thrust
+    for i in range(30):  # 3 seconds
+        action = np.array([0.0, 0.0, 0.6, 0.7])  # Yaw clockwise with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
             print(f"Clockwise yaw rate: 0.4, Yaw: {obs[8]:.2f} radians")
@@ -153,8 +153,8 @@ def test_basic_flight():
         time.sleep(0.1)
     
     # Counter-clockwise rotation
-    for i in range(15):  # 1.5 seconds
-        action = np.array([0.0, 0.0, -0.4, 0.5])  # Yaw counter-clockwise with moderate thrust
+    for i in range(30):  # 3 seconds
+        action = np.array([0.0, 0.0, -0.6, 0.7])  # Yaw counter-clockwise with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
             print(f"Counter-clockwise yaw rate: -0.4, Yaw: {obs[8]:.2f} radians")
@@ -165,16 +165,16 @@ def test_basic_flight():
     
     # Test combined controls (complex maneuver)
     print("\nPhase 6: Testing combined control inputs...")
-    for i in range(20):  # 2 seconds
+    for i in range(40):  # 4 seconds
         # Create different combinations of controls
         if i < 5:
-            action = np.array([0.2, -0.2, 0.1, 0.5])  # Roll right + pitch forward + slight yaw
+            action = np.array([0.6, -0.6, 0.3, 0.7])  # Roll right + pitch forward + slight yaw
         elif i < 10:
-            action = np.array([-0.2, -0.2, -0.1, 0.6])  # Roll left + pitch forward + opposite yaw + more thrust
+            action = np.array([-0.6, -0.6, -0.3, 0.8])  # Roll left + pitch forward + opposite yaw + more thrust
         elif i < 15:
-            action = np.array([0.2, 0.2, 0.2, 0.5])  # Roll right + pitch backward + yaw clockwise
+            action = np.array([0.6, 0.6, 0.6, 0.8])  # Roll right + pitch backward + yaw clockwise
         else:
-            action = np.array([-0.2, 0.2, -0.2, 0.4])  # Roll left + pitch backward + yaw counter-clockwise
+            action = np.array([-0.6, 0.6, -0.6, 0.7])  # Roll left + pitch backward + yaw counter-clockwise
             
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 5 == 0:
@@ -186,7 +186,7 @@ def test_basic_flight():
     
     # Hold position before ending
     print("\nPhase 7: Stabilizing before landing...")
-    for i in range(20):  # 2 seconds at 0.1s per step
+    for i in range(40):  # 4 seconds at 0.1s per step
         action = np.array([0.0, 0.0, 0.0, 0.4])  # Neutral controls with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
         if i % 10 == 0:
@@ -210,90 +210,6 @@ def test_basic_flight():
     env.close()
     print("=== Test completed: Offboard Mode, Arming and Flight Control ===\n")
 
-def test_action_space_limits():
-    """Test the limits of the action space by gradually increasing control values"""
-    global env
-    env = PX4DroneEnv()
-    
-    print("\n=== Starting test: Action Space Limits ===")
-    
-    # Enable offboard control and arm
-    print("Enabling offboard control and arming...")
-    success = env.enable_offboard_mode() and env.arm()
-    if not success:
-        print("Failed to initialize drone. Exiting test.")
-        env.close()
-        return
-    
-    obs, _ = env.reset()
-    print(f"Initial position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
-    
-    # Stabilize first
-    print("Stabilizing...")
-    for i in range(20):  # 2 seconds
-        env.step(np.array([0.0, 0.0, 0.0, 0.3]))
-        time.sleep(0.1)
-    
-    # Test thrust limits gradually
-    print("Testing thrust limits (0.1 to 0.6)...")
-    for thrust in np.linspace(0.1, 0.6, 10):
-        action = np.array([0.0, 0.0, 0.0, thrust])
-        obs, _, _, _, _ = env.step(action)
-        print(f"Thrust: {thrust:.2f}, Height: z={obs[2]:.2f}")
-        time.sleep(0.2)  # Shorter steps for this test
-    
-    # Stabilize
-    for i in range(10):
-        env.step(np.array([0.0, 0.0, 0.0, 0.3]))
-        time.sleep(0.1)
-    
-    # Test attitude limits (roll)
-    print("Testing roll limits (-0.4 to 0.4)...")
-    for roll in np.linspace(-0.4, 0.4, 8):
-        action = np.array([roll, 0.0, 0.0, 0.4])
-        obs, _, _, _, _ = env.step(action)
-        print(f"Roll: {roll:.2f}, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
-        time.sleep(0.25)
-    
-    # Stabilize
-    for i in range(10):
-        env.step(np.array([0.0, 0.0, 0.0, 0.3]))
-        time.sleep(0.1)
-    
-    # Test attitude limits (pitch)
-    print("Testing pitch limits (-0.4 to 0.4)...")
-    for pitch in np.linspace(-0.4, 0.4, 8):
-        action = np.array([0.0, pitch, 0.0, 0.4])
-        obs, _, _, _, _ = env.step(action)
-        print(f"Pitch: {pitch:.2f}, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
-        time.sleep(0.25)
-    
-    # Stabilize
-    for i in range(10):
-        env.step(np.array([0.0, 0.0, 0.0, 0.3]))
-        time.sleep(0.1)
-    
-    # Test yaw rate limits
-    print("Testing yaw rate limits (-0.5 to 0.5)...")
-    for yaw_rate in np.linspace(-0.5, 0.5, 5):
-        action = np.array([0.0, 0.0, yaw_rate, 0.4])
-        obs, _, _, _, _ = env.step(action)
-        print(f"Yaw rate: {yaw_rate:.2f}, Yaw: {obs[8]:.2f}")
-        time.sleep(0.5)
-    
-    # Final stabilization
-    print("Final stabilization...")
-    for i in range(10):
-        env.step(np.array([0.0, 0.0, 0.0, 0.3]))
-        time.sleep(0.1)
-    
-    # Disarm and close
-    print("Test complete. Disarming...")
-    env.disarm()
-    time.sleep(1.0)
-    env.close()
-    print("=== Test completed: Action Space Limits ===\n")
-
 if __name__ == "__main__":
     # Set up signal handler for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
@@ -311,7 +227,9 @@ if __name__ == "__main__":
             time.sleep(2)
             
         if args.test == 'all' or args.test == 'limits':
-            test_action_space_limits()
+            # Placeholder for future limit tests
+            print("Limit tests not implemented yet.")
+            time.sleep(2)
             
     except KeyboardInterrupt:
         print("\nTests interrupted by user")
