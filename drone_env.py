@@ -9,7 +9,12 @@ import time
 import threading
 import sys
 import os
+from subprocess import Popen, PIPE
 import logging
+from sensor_msgs.msg import Image, CameraInfo
+import cv_bridge
+import cv2
+import signal
 
 # Import PX4 messages
 try:
@@ -18,7 +23,8 @@ try:
         VehicleCommand, 
         OffboardControlMode, 
         TrajectorySetpoint, 
-        VehicleStatus
+        VehicleStatus,
+        VehicleAttitudeSetpoint
     )
 except ImportError:
     print("ERROR: Could not import px4_msgs. Make sure you've sourced ROS2 environment.")
@@ -30,7 +36,7 @@ class PX4DroneEnv(gym.Env):
     Simplified PX4 drone environment for reinforcement learning
     Focuses on core functionality: odometry, offboard control, arming, and basic control inputs
     """
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, headless=True):
         """Initialize the drone environment
         
         Args:
@@ -42,6 +48,20 @@ class PX4DroneEnv(gym.Env):
             logging.basicConfig(level=logging.DEBUG)
         else:
             logging.basicConfig(level=logging.INFO)
+
+        # Start simulation     
+        agent_command = "source /opt/ros/foxy/setup.bash; source /home/user/px4_ros2_ws/install/setup.bash; micro-xrce-dds-agent udp4 -p 8888"   
+        self.micro_xrce_dds_agent = Popen(['gnome-terminal', '--', 'bash', '-c', agent_command], preexec_fn=os.setsid)
+        time.sleep(3)
+
+        if headless:
+            headless_value = 1
+        else:
+            headless_value = 0
+
+        gazebo_command = f"source /opt/ros/foxy/setup.bash; cd ../PX4-Autopilot; HEADLESS={headless_value} make px4_sitl gazebo-classic_iris_opt_flow"
+        self.gazebo = Popen(['gnome-terminal', '--', 'bash', '-c', gazebo_command], preexec_fn=os.setsid)
+        time.sleep(3)
         
         self.logger.info('Simplified Drone Environment initialized')
         
@@ -55,12 +75,16 @@ class PX4DroneEnv(gym.Env):
         self.spin_thread = threading.Thread(target=self._spin_thread, daemon=True)
         self.spin_thread.start()
         
+        self.cv_image = None
+        self.camera_info_msg = None
+
         # Create publishers and subscribers
         self._create_publishers()
         self._create_subscribers()
         
         # Stored state
-        self.current_state = np.zeros(12)  # x, y, z, vx, vy, vz, roll, pitch, yaw, roll_rate, pitch_rate, yaw_rate
+        self.current_state = np.zeros(12, dtype=np.float32)
+        self.current_visual_state = np.zeros((240, 320, 3), dtype=np.uint8)  # Placeholder for image data
         self.received_odometry = False
         self.armed = False
         self.offboard_mode = False
@@ -74,11 +98,11 @@ class PX4DroneEnv(gym.Env):
             dtype=np.float32
         )
         
+        # Observation space is image data from the camera
         self.observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(12,),  # State dimensions
-            dtype=np.float32
+            low=0, high=255,
+            shape=(240, 320, 3),  # Assuming a 240x320 RGB image
+            dtype=np.uint8
         )
         
         # Wait for odometry data
@@ -88,7 +112,7 @@ class PX4DroneEnv(gym.Env):
         """Set up ROS2 publishers"""
         # Quality of Service settings
         qos_profile = rclpy.qos.QoSProfile(
-            reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
+            reliability=rclpy.qos.ReliabilityPolicy.RELIABLE,
             durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
             history=rclpy.qos.HistoryPolicy.KEEP_LAST,
             depth=10
@@ -112,6 +136,13 @@ class PX4DroneEnv(gym.Env):
             history=rclpy.qos.HistoryPolicy.KEEP_LAST,
             depth=10
         )
+
+        camera_info_qos_profile = rclpy.qos.QoSProfile(
+            reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
+            history=rclpy.qos.HistoryPolicy.KEEP_LAST,
+            depth=1, 
+            durability=rclpy.qos.DurabilityPolicy.VOLATILE
+        )
         
         # Odometry subscriber
         self.odometry_sub = self.node.create_subscription(
@@ -128,6 +159,25 @@ class PX4DroneEnv(gym.Env):
             self._vehicle_status_callback,
             qos_profile
         )
+
+        # Image subscriber
+        self.image_sub = self.node.create_subscription(
+            Image,                 
+            '/camera/image_raw',          
+            self._image_callback,
+            qos_profile
+        )
+
+        # Camera info subscriber
+        camera_info_topic = '/camera/camera_info'
+        self.camera_info_sub = self.node.create_subscription(
+            CameraInfo,
+            camera_info_topic,
+            self._camera_info_callback,
+            camera_info_qos_profile
+        )
+        self.logger.info(f"Subscribed to camera info topic: {camera_info_topic}")
+
     
     def _spin_thread(self):
         """Thread function to spin the ROS2 node"""
@@ -147,14 +197,14 @@ class PX4DroneEnv(gym.Env):
             print("WARNING: Timed out waiting for odometry data")
         else:
             print(f"Received odometry data after {time.time() - start_time:.1f} seconds")
-            print(f"Initial position: x={self.current_state[0]:.2f}, y={self.current_state[1]:.2f}, z={self.current_state[2]:.2f}")
+            print(f"Initial position: x={self.current_state[0]}, y={self.current_state[1]}, z={self.current_state[2]}")
     
     def _odometry_callback(self, msg):
         """Process the odometry data from the drone"""
         if not self.received_odometry:
             self.received_odometry = True
             print("First odometry message received!")
-            
+
         # Extract position
         self.current_state[0] = msg.position[0]  # x
         self.current_state[1] = msg.position[1]  # y
@@ -214,6 +264,18 @@ class PX4DroneEnv(gym.Env):
             state_name = nav_state_names.get(msg.nav_state, f"OTHER({msg.nav_state})")
             self.logger.info(f"Navigation state changed: {state_name}")
         self._prev_nav_state = msg.nav_state
+
+    def _image_callback(self, msg: Image):
+        """Callback function for the FPV camera image topic."""
+
+        bridge = cv_bridge.CvBridge()
+        self.cv_image = bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+    def _camera_info_callback(self, msg: CameraInfo):
+        """Callback function for the camera info topic."""
+        if self.camera_info_msg is None:
+             self.logger.info("Received first camera info message!")
+        self.camera_info_msg = msg
     
     def _publish_offboard_control_mode(self):
         """Publish the offboard control mode message"""
@@ -231,9 +293,7 @@ class PX4DroneEnv(gym.Env):
         self.last_offboard_timestamp = time.time()
     
     def _publish_attitude_setpoint(self, roll, pitch, yaw_rate, thrust):
-        """Publish the attitude setpoint for direct roll, pitch, yaw rate, thrust control"""
-        from px4_msgs.msg import VehicleAttitudeSetpoint
-        
+        """Publish the attitude setpoint for direct roll, pitch, yaw rate, thrust control"""        
         msg = VehicleAttitudeSetpoint()
         msg.timestamp = int(time.time() * 1e6)
         
@@ -267,7 +327,7 @@ class PX4DroneEnv(gym.Env):
         if not hasattr(self, 'attitude_setpoint_publisher'):
             qos_profile = rclpy.qos.QoSProfile(
                 reliability=rclpy.qos.ReliabilityPolicy.BEST_EFFORT,
-                durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+                durability=rclpy.qos.DurabilityPolicy.VOLATILE,
                 history=rclpy.qos.HistoryPolicy.KEEP_LAST,
                 depth=10
             )
@@ -290,7 +350,7 @@ class PX4DroneEnv(gym.Env):
         msg.from_external = True
         
         self.vehicle_command_publisher.publish(msg)
-        self.logger.info(f"Published vehicle command: {command}, params: {param1}, {param2}")
+        #self.logger.info(f"Published vehicle command: {command}, params: {param1}, {param2}")
     
     def arm(self):
         """Arm the drone
@@ -305,7 +365,7 @@ class PX4DroneEnv(gym.Env):
         )
         
         # Wait for arming
-        timeout = time.time() + 3.0  # 3 second timeout
+        timeout = time.time() + 3  # 3 second timeout
         while not self.armed and time.time() < timeout:
             time.sleep(0.1)
             
@@ -334,7 +394,7 @@ class PX4DroneEnv(gym.Env):
         
         # First send setpoints at >2Hz for a while
         start_time = time.time()
-        while time.time() - start_time < 1.0:
+        while time.time() - start_time < 20.0:
             self._publish_offboard_control_mode()
             self._publish_attitude_setpoint(0.0, 0.0, 0.0, 0.1)  # Minimal thrust to avoid drift
             time.sleep(0.05)  # 20Hz
@@ -347,7 +407,7 @@ class PX4DroneEnv(gym.Env):
         )
         
         # Keep sending setpoints while waiting for mode switch
-        timeout = time.time() + 5.0  # 5 second timeout
+        timeout = time.time() + 10.0  # 10 second timeout
         while not self.offboard_mode and time.time() < timeout:
             self._publish_offboard_control_mode()
             self._publish_attitude_setpoint(0.0, 0.0, 0.0, 0.1)
@@ -360,9 +420,61 @@ class PX4DroneEnv(gym.Env):
 
         return self.offboard_mode
     
+    def get_camera_metadata(self, timeout_sec=25.0):
+        """Get camera metadata. Polls until the persistent subscriber receives data."""
+        self.logger.info(f"Attempting to get camera info via polling (timeout: {timeout_sec}s)...")
+        start_time = time.time()
+
+        # Poll check_interval seconds to see if the callback (run by _spin_thread) has populated the variable
+        check_interval = 0.1 # How often to check the variable (seconds)
+        while self.camera_info_msg is None and (time.time() - start_time) < timeout_sec:
+            # Just sleep briefly, allowing the background thread to potentially execute the callback
+            time.sleep(check_interval)
+            self.logger.debug(f"Polling for camera info... Time elapsed: {time.time() - start_time:.1f}s")
+
+        if self.camera_info_msg is None:
+            topic_name = "N/A"
+            if hasattr(self, 'camera_info_sub') and self.camera_info_sub:
+                 topic_name = self.camera_info_sub.topic_name
+            self.logger.warning(f"Timed out waiting for camera info message on {topic_name}")
+            return None
+        else:
+            self.logger.info("Camera info received, extracting metadata.")
+            try:
+                time_stamp = self.camera_info_msg.header.stamp
+                frame_id = self.camera_info_msg.header.frame_id
+                height = self.camera_info_msg.height
+                width = self.camera_info_msg.width
+                distortion_model = self.camera_info_msg.distortion_model
+                distortion_coefficients = list(self.camera_info_msg.d)
+                camera_matrix = np.array(self.camera_info_msg.k).reshape(3, 3)
+                rectification_matrix = np.array(self.camera_info_msg.r).reshape(3, 3)
+                projection_matrix = np.array(self.camera_info_msg.p).reshape(3, 4)
+                binning_x = self.camera_info_msg.binning_x
+                binning_y = self.camera_info_msg.binning_y
+                roi_dict = {
+                    "x_offset": self.camera_info_msg.roi.x_offset, "y_offset": self.camera_info_msg.roi.y_offset,
+                    "height": self.camera_info_msg.roi.height, "width": self.camera_info_msg.roi.width,
+                    "do_rectify": self.camera_info_msg.roi.do_rectify
+                }
+                camera_metadata = {
+                    "timestamp": time_stamp, "frame_id": frame_id, "height": height, "width": width,
+                    "distortion_model": distortion_model, "distortion_coefficients": distortion_coefficients,
+                    "camera_matrix": camera_matrix, "rectification_matrix": rectification_matrix,
+                    "projection_matrix": projection_matrix, "binning_x": binning_x, "binning_y": binning_y,
+                    "roi": roi_dict
+                }
+                return camera_metadata
+            except AttributeError as e:
+                 self.logger.error(f"Error accessing CameraInfo attributes: {e}. Message content: {self.camera_info_msg}")
+                 return None
+            except Exception as e:
+                 self.logger.error(f"Error processing camera metadata: {e}")
+                 return None
+    
     def reset(self, seed=None, options=None):
         """Reset the environment for a new episode"""
-        super().reset(seed=seed)
+        super().reset(seed=seed)                    # We should move the drone to initial position, and reset maze when maze is implemented.
         
         # Make sure we're in offboard mode and armed
         if not self.offboard_mode:
@@ -420,6 +532,10 @@ class PX4DroneEnv(gym.Env):
     
     def _get_obs(self):
         """Get current observation"""
+        return self.cv_image.copy() #self.current_state.copy()
+    
+    def get_env_info(self):
+        """This function is intended only to be used to get state information needed to calculate the reward"""
         return self.current_state.copy()
     
     def close(self):
@@ -427,13 +543,60 @@ class PX4DroneEnv(gym.Env):
         self.logger.info("Closing environment")
         
         try:
-            # Disarm if armed
             if self.armed:
                 self.disarm()
             
+            # Stop the executor and wait for the spin thread to finish
+            if hasattr(self, 'executor'):
+                self.executor.shutdown()
+                self.logger.info("ROS2 executor shutdown requested")
+            if hasattr(self, 'spin_thread') and self.spin_thread.is_alive():
+                self.spin_thread.join(timeout=5.0) # Wait for the thread to exit cleanly
+                if self.spin_thread.is_alive():
+                    self.logger.warning("ROS2 spin thread did not exit cleanly after 5s")
+                else:
+                    self.logger.info("ROS2 spin thread joined")
+
+
             # Shutdown ROS node
-            self.node.destroy_node()
-            rclpy.shutdown()
-            self.logger.info("ROS2 node shut down")
+            if hasattr(self, 'node') and rclpy.ok():
+                self.node.destroy_node()
+                self.logger.info("ROS2 node destroyed")
+            if rclpy.ok():
+                rclpy.shutdown()
+                self.logger.info("ROS2 context shut down")
+
+
+            # Terminate subprocesses            
+            # Force kill specific processes by name
+            try:
+                self.logger.info("Killing DDS agent and Gazebo processes")
+                
+                # Kill micro-xrce-dds-agent process
+                kill_process = Popen(['pkill', '-9', '-f', 'micro-xrce-dds-agent'], stderr=PIPE)
+                kill_process.wait(timeout=1)
+                
+                # Kill gazebo processes
+                kill_process = Popen(['pkill', '-9', '-f', 'gz'], stderr=PIPE)
+                kill_process.wait(timeout=1)
+                kill_process = Popen(['pkill', '-9', '-f', 'gazebo'], stderr=PIPE)
+                kill_process.wait(timeout=1)
+                
+                self.logger.info("External processes terminated via pkill")
+            except Exception as e:
+                self.logger.error(f"Error killing processes: {e}")
+
+
+            self.logger.info("Simulation processes terminated")
+
+        except KeyboardInterrupt:
+            self.logger.info("Keyboard interrupt received, attempting graceful shutdown...")
+            # Avoid recursion if KeyboardInterrupt happens during close
+            if not getattr(self, '_closing', False):
+                 self._closing = True
+                 self.close() # Re-attempt close
+            sys.exit(0)
         except Exception as e:
             self.logger.error(f"Error during environment cleanup: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc()) # Log full traceback

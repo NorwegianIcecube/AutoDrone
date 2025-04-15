@@ -9,6 +9,7 @@ import numpy as np
 from drone_env import PX4DroneEnv
 import signal
 import sys
+import cv2
 
 # Global variable for environment instance to handle graceful shutdown
 env = None
@@ -23,9 +24,11 @@ def signal_handler(sig, frame):
 def test_basic_flight():
     """Test offboard control, arming, and basic flight maneuvers"""
     global env
-    env = PX4DroneEnv(debug=True)
+    env = PX4DroneEnv(debug=True, headless=False)
+    time.sleep(6.0)  # Allow time for environment to initialize
+
     
-    print("\n=== Starting test: Offboard Mode, Arming and Flight Control ===")
+    print("\n=== Starting test: Offboard Mode, Arming, Camera and Flight Control ===")
     
     # Enable offboard control first - this is required before arming for offboard flight
     print("Enabling offboard control mode...")
@@ -48,18 +51,46 @@ def test_basic_flight():
     # Reset environment to get initial observation
     print("Initializing environment...")
     obs, _ = env.reset()
-    initial_position = obs[0:3].copy()
-    initial_orientation = obs[6:9].copy()
-    print(f"Initial position: x={initial_position[0]:.2f}, y={initial_position[1]:.2f}, z={initial_position[2]:.2f}")
-    print(f"Initial orientation: roll={initial_orientation[0]:.2f}, pitch={initial_orientation[1]:.2f}, yaw={initial_orientation[2]:.2f}")
+    #initial_position = obs[0:3].copy()
+    #initial_orientation = obs[6:9].copy()
+    #print(f"Initial position: x={initial_position[0]}, y={initial_position[1]}, z={initial_position[2]}")
+    #print(f"Initial orientation: roll={initial_orientation[0]}, pitch={initial_orientation[1]}, yaw={initial_orientation[2]}")
+
+    print("\n=== Starting test: Checking Camera ===")
     
+    try:
+        #time.sleep(3)  # Allow time for everything to initialize
+        camera_metadata = env.get_camera_metadata()
+    except Exception as e:
+        print(f"Error retrieving camera metadata: {e}")
+        env.close()
+        return
+    if camera_metadata is None:
+        print("Failed to retrieve camera metadata.")
+        env.close()
+        return
+    print("Camera metadata retrieved successfully!")
+    print(f"Camera metadata: {camera_metadata}")
+    
+    print("\n Checking image feed...")
+    timeout = 10 + time.time()
+    while env.cv_image is None and time.time() < timeout:
+        time.sleep(0.1)
+    if env.cv_image is None:
+        print("Failed to retrieve image feed from camera.")
+        env.close()
+        return
+    print("Image feed retrieved successfully!")
+    print("Image shape:", env.cv_image.shape)
+    
+    print("\n=== Starting test: Basic Flight Maneuvers ===")
     # Hold position with slight thrust to stabilize
     print("\nPhase 1: Stabilizing with moderate thrust...")
     for i in range(30):  # 3 seconds at 0.1s per step
         action = np.array([0.0, 0.0, 0.0, 0.4])  # Neutral controls with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 10 == 0:  # Print position every second
-            print(f"Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 10 == 0:  # Print position every second
+        #    print(f"Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -72,8 +103,8 @@ def test_basic_flight():
         thrust = 0.4 + (i / 20) * 0.3  # Increase from 0.4 to 0.7
         action = np.array([0.0, 0.0, 0.0, thrust])
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Thrust: {thrust:.2f}, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 5 == 0:
+        #    print(f"Thrust: {thrust:.2f}, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -85,8 +116,8 @@ def test_basic_flight():
     for i in range(30):  # 3 seconds
         action = np.array([0.0, -0.6, 0.0, 0.7])  # Pitch forward with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Forward pitch: -0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 5 == 0:
+        #    print(f"Forward pitch: -0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -96,8 +127,8 @@ def test_basic_flight():
     for i in range(30):  # 3 seconds
         action = np.array([0.0, 0.6, 0.0, 0.7])  # Pitch backward with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Backward pitch: 0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 5 == 0:
+        #    print(f"Backward pitch: 0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -115,8 +146,8 @@ def test_basic_flight():
     for i in range(30):  # 3 seconds
         action = np.array([0.6, 0.0, 0.0, 0.7])  # Roll right with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Right roll: 0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 5 == 0:
+        #    print(f"Right roll: 0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -126,8 +157,8 @@ def test_basic_flight():
     for i in range(30):  # 3 seconds
         action = np.array([-0.6, 0.0, 0.0, 0.7])  # Roll left with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Left roll: -0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 5 == 0:
+        #    print(f"Left roll: -0.3, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -145,8 +176,8 @@ def test_basic_flight():
     for i in range(30):  # 3 seconds
         action = np.array([0.0, 0.0, 0.6, 0.7])  # Yaw clockwise with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Clockwise yaw rate: 0.4, Yaw: {obs[8]:.2f} radians")
+        #if i % 5 == 0:
+        #    print(f"Clockwise yaw rate: 0.4, Yaw: {obs[8]:.2f} radians")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -156,8 +187,8 @@ def test_basic_flight():
     for i in range(30):  # 3 seconds
         action = np.array([0.0, 0.0, -0.6, 0.7])  # Yaw counter-clockwise with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Counter-clockwise yaw rate: -0.4, Yaw: {obs[8]:.2f} radians")
+        #if i % 5 == 0:
+        #    print(f"Counter-clockwise yaw rate: -0.4, Yaw: {obs[8]:.2f} radians")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -177,8 +208,8 @@ def test_basic_flight():
             action = np.array([-0.6, 0.6, -0.6, 0.7])  # Roll left + pitch backward + yaw counter-clockwise
             
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 5 == 0:
-            print(f"Combined action: {action}, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}, Yaw: {obs[8]:.2f}")
+        #if i % 5 == 0:
+        #    print(f"Combined action: {action}, Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}, Yaw: {obs[8]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
@@ -189,18 +220,18 @@ def test_basic_flight():
     for i in range(40):  # 4 seconds at 0.1s per step
         action = np.array([0.0, 0.0, 0.0, 0.4])  # Neutral controls with moderate thrust
         obs, reward, terminated, truncated, info = env.step(action)
-        if i % 10 == 0:
-            print(f"Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+        #if i % 10 == 0:
+        #    print(f"Position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
         if terminated or truncated:
             print("Flight ended early")
             break
         time.sleep(0.1)
     
     # Report final position and distance traveled
-    final_position = obs[0:3].copy()
-    distance = np.linalg.norm(final_position - initial_position)
-    print(f"\nFlight complete. Total distance from start: {distance:.2f}m")
-    print(f"Final position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
+    #final_position = obs[0:3].copy()
+    #distance = np.linalg.norm(final_position - initial_position)
+    #print(f"\nFlight complete. Total distance from start: {distance:.2f}m")
+    #print(f"Final position: x={obs[0]:.2f}, y={obs[1]:.2f}, z={obs[2]:.2f}")
     
     # Disarm and close environment
     print("Disarming drone...")
@@ -236,7 +267,7 @@ if __name__ == "__main__":
         if env is not None:
             print("Closing environment...")
             env.close()
-    except Exception as e:
-        print(f"Error during test: {e}")
-        if env is not None:
-            env.close()
+    #except Exception as e:
+    #    print(f"Error during test: {e}")
+    #    if env is not None:
+    #        env.close()

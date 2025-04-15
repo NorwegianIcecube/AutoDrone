@@ -74,7 +74,7 @@ micro-xrce-dds-agent udp4 -p 8888
 ```bash
 source /opt/ros/foxy/setup.bash
 cd /path/to/PX4-Autopilot
-make px4_sitl gazebo-classic
+make px4_sitl gazebo-classic_iris_opt_flow
 ```
 
 4. In a new terminal, source all required environments and run the test script:

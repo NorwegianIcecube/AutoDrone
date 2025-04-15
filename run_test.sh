@@ -74,8 +74,8 @@ else
 fi
 
 # Run diagnostic script to check PX4 messages with relative path
-echo "Running PX4 message diagnostics..."
-$PYTHON_CMD ./check_px4_messages.py
+#echo "Running PX4 message diagnostics..."
+#$PYTHON_CMD ./check_px4_messages.py
 
 # Run the test script
 echo "Running test: $TEST_TYPE"
