@@ -55,13 +55,10 @@ class PX4DroneEnv(gym.Env):
         time.sleep(3)
 
         if headless:
-            headless_value = 1
+            gazebo_command = f"source /opt/ros/foxy/setup.bash; cd ../PX4-Autopilot; HEADLESS=1 PX4_SITL_WORLD=pilot-house make px4_sitl gazebo-classic_iris_opt_flow"
         else:
-            headless_value = 0
-
-        gazebo_command = f"source /opt/ros/foxy/setup.bash; cd ../PX4-Autopilot; HEADLESS={headless_value} make px4_sitl gazebo-classic_iris_opt_flow"
+            gazebo_command = f"source /opt/ros/foxy/setup.bash; cd ../PX4-Autopilot; PX4_SITL_WORLD=pilot-house make px4_sitl gazebo-classic_iris_opt_flow"
         self.gazebo = Popen(['gnome-terminal', '--', 'bash', '-c', gazebo_command], preexec_fn=os.setsid)
-        time.sleep(3)
         
         self.logger.info('Simplified Drone Environment initialized')
         
@@ -580,6 +577,10 @@ class PX4DroneEnv(gym.Env):
                 kill_process = Popen(['pkill', '-9', '-f', 'gz'], stderr=PIPE)
                 kill_process.wait(timeout=1)
                 kill_process = Popen(['pkill', '-9', '-f', 'gazebo'], stderr=PIPE)
+                kill_process.wait(timeout=1)
+                kill_process = Popen(['pkill', '-9', '-f', 'gzserver'], stderr=PIPE)
+                kill_process.wait(timeout=1)
+                kill_process = Popen(['pkill', '-9', '-f', 'px4'], stderr=PIPE)
                 kill_process.wait(timeout=1)
                 
                 self.logger.info("External processes terminated via pkill")
