@@ -9,7 +9,6 @@ import time
 import threading
 import sys
 import os
-from subprocess import Popen, PIPE
 import logging
 from sensor_msgs.msg import Image, CameraInfo
 import cv_bridge
@@ -49,19 +48,6 @@ class PX4DroneEnv(gym.Env):
         else:
             logging.basicConfig(level=logging.INFO)
 
-        # Start simulation     
-        agent_command = "source /opt/ros/foxy/setup.bash; source /home/user/px4_ros2_ws/install/setup.bash; micro-xrce-dds-agent udp4 -p 8888"   
-        self.micro_xrce_dds_agent = Popen(['gnome-terminal', '--', 'bash', '-c', agent_command], preexec_fn=os.setsid)
-        time.sleep(3)
-
-        if headless:
-            gazebo_command = f"source /opt/ros/foxy/setup.bash; cd ../PX4-Autopilot; HEADLESS=1 PX4_SITL_WORLD=pilot-house make px4_sitl gazebo-classic_iris_opt_flow"
-        else:
-            gazebo_command = f"source /opt/ros/foxy/setup.bash; cd ../PX4-Autopilot; PX4_SITL_WORLD=pilot-house make px4_sitl gazebo-classic_iris_opt_flow"
-        self.gazebo = Popen(['gnome-terminal', '--', 'bash', '-c', gazebo_command], preexec_fn=os.setsid)
-        
-        self.logger.info('Simplified Drone Environment initialized')
-        
         # Initialize ROS2
         rclpy.init(args=None)
         self.node = rclpy.create_node('px4_drone_env')
@@ -180,13 +166,13 @@ class PX4DroneEnv(gym.Env):
         """Thread function to spin the ROS2 node"""
         self.executor.spin()
         
-    def _wait_for_odometry(self, timeout=10):
+    def _wait_for_odometry(self, timeout=20):
         """Wait for initial odometry data"""
         print(f"Waiting for odometry data (timeout: {timeout} seconds)...")
         start_time = time.time()
         while not self.received_odometry and time.time() - start_time < timeout:
-            # Only print every 3 seconds to reduce verbosity
-            if int(time.time() - start_time) % 3 == 0 and int(time.time() - start_time) > 0:
+            # Only print every 5 seconds to reduce verbosity
+            if int(time.time() - start_time) % 5 == 0 and int(time.time() - start_time) > 0:
                 print(f"Waiting... (elapsed: {int(time.time() - start_time)}s)")
             time.sleep(1.0)
         
@@ -241,6 +227,7 @@ class PX4DroneEnv(gym.Env):
     def _vehicle_status_callback(self, msg):
         """Monitor vehicle status changes"""
         # Track arming state changes
+        print(f"Arming state: {msg.arming_state}, Nav state: {msg.nav_state}")
         self.armed = (msg.arming_state == 2)  # 2 = ARMED
         
         # Track nav state for offboard mode
@@ -284,7 +271,7 @@ class PX4DroneEnv(gym.Env):
         msg.acceleration = False
         msg.attitude = True
         msg.body_rate = False
-        msg.thrust_and_torque = False
+        #msg.thrust_and_torque = False
         
         self.offboard_control_mode_publisher.publish(msg)
         self.last_offboard_timestamp = time.time()
@@ -562,30 +549,6 @@ class PX4DroneEnv(gym.Env):
             if rclpy.ok():
                 rclpy.shutdown()
                 self.logger.info("ROS2 context shut down")
-
-
-            # Terminate subprocesses            
-            # Force kill specific processes by name
-            try:
-                self.logger.info("Killing DDS agent and Gazebo processes")
-                
-                # Kill micro-xrce-dds-agent process
-                kill_process = Popen(['pkill', '-9', '-f', 'micro-xrce-dds-agent'], stderr=PIPE)
-                kill_process.wait(timeout=1)
-                
-                # Kill gazebo processes
-                kill_process = Popen(['pkill', '-9', '-f', 'gz'], stderr=PIPE)
-                kill_process.wait(timeout=1)
-                kill_process = Popen(['pkill', '-9', '-f', 'gazebo'], stderr=PIPE)
-                kill_process.wait(timeout=1)
-                kill_process = Popen(['pkill', '-9', '-f', 'gzserver'], stderr=PIPE)
-                kill_process.wait(timeout=1)
-                kill_process = Popen(['pkill', '-9', '-f', 'px4'], stderr=PIPE)
-                kill_process.wait(timeout=1)
-                
-                self.logger.info("External processes terminated via pkill")
-            except Exception as e:
-                self.logger.error(f"Error killing processes: {e}")
 
 
             self.logger.info("Simulation processes terminated")

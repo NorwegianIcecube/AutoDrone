@@ -37,8 +37,11 @@ def main():
         obs = np.array(obs)
         
         # Display the image stream using CV2
-        cv2.imshow("Drone Camera", obs)
-        cv2.waitKey(1)
+        #cv2.imshow("Drone Camera", obs)
+        #cv2.waitKey(1)
+        # Print image values
+        print("Image shape:", obs.shape)
+        print(obs)
 
     # Close the environment
     env.close()

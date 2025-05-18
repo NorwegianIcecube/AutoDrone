@@ -4,6 +4,7 @@ numpy==1.24.4
 matplotlib==3.7.5
 opencv-python==4.11.0.86
 torch==2.4.1
+cv-bridge==1.13.0.post0
 # subprocess.run
 # cloudpickle==3.1.1
 # Optional: CUDA support packages if needed
