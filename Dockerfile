@@ -79,10 +79,11 @@ ENV NVIDIA_DRIVER_CAPABILITIES=all,graphics
 RUN pip3 install --user -U empy==3.3.4 pyros-genmsg setuptools typing-extensions
 
 WORKDIR /root/AutoDrone
-COPY . /root/AutoDrone/
-
+COPY ./requirements.txt /root/AutoDrone/requirements.txt
 RUN cd /root/AutoDrone && \
     pip3 install -r requirements.txt
+COPY . /root/AutoDrone/
+
 
 RUN rosdep init && rosdep update && rosdep install --from-paths /root/AutoDrone --ignore-src -r -y
 
